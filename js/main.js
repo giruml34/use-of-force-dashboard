@@ -26,7 +26,6 @@ const map = new mapboxgl.Map({
 map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
 function parseYear(dateStr) {
-  // ex: "01/08/2016 12:13:00 AM"
   if (!dateStr) return null;
   const m = String(dateStr).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   return m ? Number(m[3]) : null;
@@ -161,24 +160,29 @@ function refresh() {
 }
 
 // --- Load data + start ---
+// Use d3 v5 that comes with C3
 Promise.all([
   d3.csv(CSV_PATH),
   d3.json(GEOJSON_PATH)
 ]).then(([rows, geo]) => {
 
-  console.log("CSV loaded rows:", rows.length);
-  console.log("CSV columns:", rows.length ? Object.keys(rows[0]) : "NO ROWS");
-  console.log("GeoJSON features:", geo && geo.features ? geo.features.length : "NO FEATURES");
+  console.log("CSV rows:", rows.length);
+  console.log("CSV headers:", rows.length ? Object.keys(rows[0]) : "NO ROWS");
 
-  // IMPORTANT: make sure column name matches your CSV exactly:
-  // Your dataset likely has "Occured_date_time" (missing an 'r' in occurred)
-  const DATE_COL = "Occured_date_time";
+  // Auto-detect the date column name (handles Occured_date_time vs Occurred_date_time)
+  const headers = rows.length ? Object.keys(rows[0]) : [];
+  const dateCol =
+    headers.find(h => h.toLowerCase() === "occured_date_time") ||
+    headers.find(h => h.toLowerCase() === "occurred_date_time") ||
+    headers.find(h => h.toLowerCase().includes("date") && h.toLowerCase().includes("time"));
+
+  console.log("Using date column:", dateCol);
 
   rawRows = rows.map(r => ({
     ...r,
     Beat: String(r.Beat || "").trim(),
     Subject_Race: String(r.Subject_Race || "").trim(),
-    year: parseYear(r[DATE_COL])
+    year: parseYear(dateCol ? r[dateCol] : null)
   }));
 
   beatsGeo = geo;
@@ -228,11 +232,9 @@ Promise.all([
     map.on("mousemove", "beats-fill", (e) => {
       map.getCanvas().style.cursor = "pointer";
       const f = e.features[0];
-      const beat = f.properties.beat;
-      const count = f.properties.count || 0;
       popup
         .setLngLat(e.lngLat)
-        .setHTML(`<b>Beat ${beat}</b><br/>Incidents: ${count}`)
+        .setHTML(`<b>Beat ${f.properties.beat}</b><br/>Incidents: ${f.properties.count || 0}`)
         .addTo(map);
     });
 
@@ -246,6 +248,5 @@ Promise.all([
 
 }).catch(err => {
   console.error(err);
-  alert("Error loading data. Open console to see the error (Cmd+Opt+J).");
+  alert("Data load error. Open console (Cmd+Opt+J) and look for a 404 or header mismatch.");
 });
-
