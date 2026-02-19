@@ -1,5 +1,7 @@
 # US COVID Smart Dashboard
 
+- I used AI for debugging and troubleshooting only. I did not use AI in any prohibited way and can explain all parts of this project.
+
 ## Project Overview
 
 For this lab, I created a smart dashboard that shows COVID data across all 50 U.S. states. The goal is to make COVID trends easier to understand by combining a map and charts into one interactive page.
