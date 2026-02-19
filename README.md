@@ -41,4 +41,5 @@ This project uses:
 
 ## Live Website
 
-https://girum134.github.io/use-of-force-dashboard/
+[https://girum134.github.io/use-of-force-dashboard/](https://giruml34.github.io/use-of-force-dashboard/)
+
