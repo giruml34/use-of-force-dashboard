@@ -1,4 +1,4 @@
-mapboxgl.accessToken = "PASTE_YOUR_MAPBOX_TOKEN_HERE";
+mapboxgl.accessToken = "pk.eyJ1IjoiZ2lydW13IiwiYSI6ImNtaGNsMnczejI4a2cybXB1b3h6dHBuaHkifQ.fO5Cyk2RL57zq0RKG8BDkg";
 
 const CSV_PATH = "data/Use_Of_Force.csv";
 const GEOJSON_PATH = "data/Beats.geojson";
@@ -6,6 +6,7 @@ const GEOJSON_PATH = "data/Beats.geojson";
 let rawRows = [];
 let beatsGeo = null;
 let raceChart = null;
+let mapLoaded = false;
 
 const raceSelect = document.getElementById("raceSelect");
 const yearSelect = document.getElementById("yearSelect");
@@ -22,12 +23,12 @@ const map = new mapboxgl.Map({
   center: [-122.335, 47.61],
   zoom: 10.5
 });
-
 map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
 function parseYear(dateStr) {
-  // format looks like: "01/08/2016 12:13:00 AM"
-  const m = dateStr?.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  // ex: "01/08/2016 12:13:00 AM"
+  if (!dateStr) return null;
+  const m = String(dateStr).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   return m ? Number(m[3]) : null;
 }
 
@@ -49,7 +50,7 @@ function fillDropdown(el, options, addAll = true) {
 
 function getFilters() {
   return {
-    race: raceSelect.value,
+    race: raceSelect.value || "ALL",
     year: yearSelect.value === "ALL" ? null : Number(yearSelect.value)
   };
 }
@@ -76,7 +77,6 @@ function updateKpis(filtered) {
   const total = filtered.length;
   kpiTotal.textContent = total.toLocaleString();
 
-  // top beat
   const beatCounts = countBy(filtered, r => r.Beat);
   let topBeat = "-";
   let topBeatCount = -1;
@@ -85,7 +85,6 @@ function updateKpis(filtered) {
   }
   kpiTopBeat.textContent = topBeat === "-" ? "-" : `${topBeat} (${topBeatCount})`;
 
-  // top race
   const raceCounts = countBy(filtered, r => r.Subject_Race);
   let topRace = "-";
   let topRaceCount = -1;
@@ -131,14 +130,15 @@ function updateRaceChart(filtered) {
 }
 
 function updateMap(filtered) {
-  // count incidents per beat
+  if (!mapLoaded) return;
+  if (!map.getSource("beats")) return;
+
   const beatCounts = countBy(filtered, r => r.Beat);
 
-  // make a fresh geojson with "count" property
   const newGeo = {
     ...beatsGeo,
     features: beatsGeo.features.map(f => {
-      const beat = f.properties.beat;
+      const beat = String(f.properties.beat || "").trim();
       const count = beatCounts.get(beat) || 0;
       return {
         ...f,
@@ -165,23 +165,36 @@ Promise.all([
   d3.csv(CSV_PATH),
   d3.json(GEOJSON_PATH)
 ]).then(([rows, geo]) => {
-  // prep rows
+
+  console.log("CSV loaded rows:", rows.length);
+  console.log("CSV columns:", rows.length ? Object.keys(rows[0]) : "NO ROWS");
+  console.log("GeoJSON features:", geo && geo.features ? geo.features.length : "NO FEATURES");
+
+  // IMPORTANT: make sure column name matches your CSV exactly:
+  // Your dataset likely has "Occured_date_time" (missing an 'r' in occurred)
+  const DATE_COL = "Occured_date_time";
+
   rawRows = rows.map(r => ({
     ...r,
-    year: parseYear(r.Occured_date_time)
+    Beat: String(r.Beat || "").trim(),
+    Subject_Race: String(r.Subject_Race || "").trim(),
+    year: parseYear(r[DATE_COL])
   }));
 
   beatsGeo = geo;
 
-  // dropdown options
   const races = Array.from(new Set(rawRows.map(r => r.Subject_Race))).filter(Boolean).sort();
   const years = Array.from(new Set(rawRows.map(r => r.year))).filter(Boolean).sort((a, b) => a - b);
 
   fillDropdown(raceSelect, races, true);
   fillDropdown(yearSelect, years.map(String), true);
 
-  // map layer once map is ready
+  raceSelect.addEventListener("change", refresh);
+  yearSelect.addEventListener("change", refresh);
+
   map.on("load", () => {
+    mapLoaded = true;
+
     map.addSource("beats", { type: "geojson", data: beatsGeo });
 
     map.addLayer({
@@ -210,7 +223,6 @@ Promise.all([
       paint: { "line-color": "#333", "line-width": 0.6, "line-opacity": 0.4 }
     });
 
-    // popup on hover
     const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false });
 
     map.on("mousemove", "beats-fill", (e) => {
@@ -229,16 +241,11 @@ Promise.all([
       popup.remove();
     });
 
-    // first render
     refresh();
   });
 
-  // refresh on filters
-  raceSelect.addEventListener("change", refresh);
-  yearSelect.addEventListener("change", refresh);
-
 }).catch(err => {
   console.error(err);
-  alert("Error loading data. Check console + file paths in /data folder.");
+  alert("Error loading data. Open console to see the error (Cmd+Opt+J).");
 });
 
