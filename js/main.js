@@ -1,6 +1,7 @@
 mapboxgl.accessToken = "pk.eyJ1IjoiZ2lydW13IiwiYSI6ImNtbHNxcGY3bjA5bmgzZ29rcXpxeGkwZWsifQ.ebIyD8iAndfOu3mo_HEcBA";
 
-const CSV_PATH = "data/Uuse_of_force.csv";
+// IMPORTANT: your filename has a space, so we must URL-encode it as %20
+const CSV_PATH = "data/Use_Of_Force_20260218%20(1).csv";
 const GEOJSON_PATH = "data/Beats.geojson";
 
 let rawRows = [];
@@ -27,8 +28,16 @@ map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
 function parseYear(dateStr) {
   if (!dateStr) return null;
-  const m = String(dateStr).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  return m ? Number(m[3]) : null;
+
+  // Works for: "01/08/2016 12:13:00 AM"
+  const m1 = String(dateStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m1) return Number(m1[3]);
+
+  // Works for: "2016-01-08T00:13:00.000"
+  const m2 = String(dateStr).match(/^(\d{4})-/);
+  if (m2) return Number(m2[1]);
+
+  return null;
 }
 
 function fillDropdown(el, options, addAll = true) {
@@ -73,20 +82,17 @@ function countBy(rows, keyFn) {
 }
 
 function updateKpis(filtered) {
-  const total = filtered.length;
-  kpiTotal.textContent = total.toLocaleString();
+  kpiTotal.textContent = filtered.length.toLocaleString();
 
   const beatCounts = countBy(filtered, r => r.Beat);
-  let topBeat = "-";
-  let topBeatCount = -1;
+  let topBeat = "-", topBeatCount = -1;
   for (const [b, c] of beatCounts.entries()) {
     if (c > topBeatCount) { topBeatCount = c; topBeat = b; }
   }
   kpiTopBeat.textContent = topBeat === "-" ? "-" : `${topBeat} (${topBeatCount})`;
 
   const raceCounts = countBy(filtered, r => r.Subject_Race);
-  let topRace = "-";
-  let topRaceCount = -1;
+  let topRace = "-", topRaceCount = -1;
   for (const [rr, c] of raceCounts.entries()) {
     if (c > topRaceCount) { topRaceCount = c; topRace = rr; }
   }
@@ -139,10 +145,7 @@ function updateMap(filtered) {
     features: beatsGeo.features.map(f => {
       const beat = String(f.properties.beat || "").trim();
       const count = beatCounts.get(beat) || 0;
-      return {
-        ...f,
-        properties: { ...f.properties, count }
-      };
+      return { ...f, properties: { ...f.properties, count } };
     })
   };
 
@@ -150,103 +153,111 @@ function updateMap(filtered) {
 }
 
 function refresh() {
-  const filters = getFilters();
-  const filtered = filterRows(rawRows, filters);
-
+  const filtered = filterRows(rawRows, getFilters());
   updateKpis(filtered);
   updateTop5Beats(filtered);
   updateRaceChart(filtered);
   updateMap(filtered);
 }
 
-// --- Load data + start ---
-// Use d3 v5 that comes with C3
-Promise.all([
-  d3.csv(CSV_PATH),
-  d3.json(GEOJSON_PATH)
-]).then(([rows, geo]) => {
+async function fetchText(url) {
+  const res = await fetch(url);
+  console.log("FETCH", url, res.status);
+  if (!res.ok) throw new Error(`${url} failed: ${res.status}`);
+  return await res.text();
+}
 
-  console.log("CSV rows:", rows.length);
-  console.log("CSV headers:", rows.length ? Object.keys(rows[0]) : "NO ROWS");
+async function fetchJson(url) {
+  const res = await fetch(url);
+  console.log("FETCH", url, res.status);
+  if (!res.ok) throw new Error(`${url} failed: ${res.status}`);
+  return await res.json();
+}
 
-  // Auto-detect the date column name (handles Occured_date_time vs Occurred_date_time)
-  const headers = rows.length ? Object.keys(rows[0]) : [];
-  const dateCol =
-    headers.find(h => h.toLowerCase() === "occured_date_time") ||
-    headers.find(h => h.toLowerCase() === "occurred_date_time") ||
-    headers.find(h => h.toLowerCase().includes("date") && h.toLowerCase().includes("time"));
+(async function init() {
+  try {
+    const csvText = await fetchText(CSV_PATH);
+    beatsGeo = await fetchJson(GEOJSON_PATH);
 
-  console.log("Using date column:", dateCol);
+    const rows = d3.csvParse(csvText);
+    console.log("CSV parsed rows:", rows.length);
+    console.log("CSV headers:", rows.length ? Object.keys(rows[0]) : "NO ROWS");
 
-  rawRows = rows.map(r => ({
-    ...r,
-    Beat: String(r.Beat || "").trim(),
-    Subject_Race: String(r.Subject_Race || "").trim(),
-    year: parseYear(dateCol ? r[dateCol] : null)
-  }));
+    // Auto-detect date column name
+    const headers = rows.length ? Object.keys(rows[0]) : [];
+    const dateCol =
+      headers.find(h => h.toLowerCase() === "occured_date_time") ||
+      headers.find(h => h.toLowerCase() === "occurred_date_time") ||
+      headers.find(h => h.toLowerCase().includes("date") && h.toLowerCase().includes("time"));
 
-  beatsGeo = geo;
+    console.log("Using date column:", dateCol);
 
-  const races = Array.from(new Set(rawRows.map(r => r.Subject_Race))).filter(Boolean).sort();
-  const years = Array.from(new Set(rawRows.map(r => r.year))).filter(Boolean).sort((a, b) => a - b);
+    rawRows = rows.map(r => ({
+      ...r,
+      Beat: String(r.Beat || "").trim(),
+      Subject_Race: String(r.Subject_Race || "").trim(),
+      year: parseYear(dateCol ? r[dateCol] : null)
+    }));
 
-  fillDropdown(raceSelect, races, true);
-  fillDropdown(yearSelect, years.map(String), true);
+    const races = Array.from(new Set(rawRows.map(r => r.Subject_Race))).filter(Boolean).sort();
+    const years = Array.from(new Set(rawRows.map(r => r.year))).filter(Boolean).sort((a, b) => a - b);
 
-  raceSelect.addEventListener("change", refresh);
-  yearSelect.addEventListener("change", refresh);
+    fillDropdown(raceSelect, races, true);
+    fillDropdown(yearSelect, years.map(String), true);
 
-  map.on("load", () => {
-    mapLoaded = true;
+    raceSelect.addEventListener("change", refresh);
+    yearSelect.addEventListener("change", refresh);
 
-    map.addSource("beats", { type: "geojson", data: beatsGeo });
+    map.on("load", () => {
+      mapLoaded = true;
 
-    map.addLayer({
-      id: "beats-fill",
-      type: "fill",
-      source: "beats",
-      paint: {
-        "fill-color": [
-          "interpolate",
-          ["linear"],
-          ["get", "count"],
-          0, "#f7fbff",
-          10, "#c6dbef",
-          30, "#6baed6",
-          60, "#2171b5",
-          120, "#08306b"
-        ],
-        "fill-opacity": 0.75
-      }
+      map.addSource("beats", { type: "geojson", data: beatsGeo });
+
+      map.addLayer({
+        id: "beats-fill",
+        type: "fill",
+        source: "beats",
+        paint: {
+          "fill-color": [
+            "interpolate", ["linear"], ["get", "count"],
+            0, "#f7fbff",
+            10, "#c6dbef",
+            30, "#6baed6",
+            60, "#2171b5",
+            120, "#08306b"
+          ],
+          "fill-opacity": 0.75
+        }
+      });
+
+      map.addLayer({
+        id: "beats-outline",
+        type: "line",
+        source: "beats",
+        paint: { "line-color": "#333", "line-width": 0.6, "line-opacity": 0.4 }
+      });
+
+      const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false });
+
+      map.on("mousemove", "beats-fill", (e) => {
+        map.getCanvas().style.cursor = "pointer";
+        const f = e.features[0];
+        popup
+          .setLngLat(e.lngLat)
+          .setHTML(`<b>Beat ${f.properties.beat}</b><br/>Incidents: ${f.properties.count || 0}`)
+          .addTo(map);
+      });
+
+      map.on("mouseleave", "beats-fill", () => {
+        map.getCanvas().style.cursor = "";
+        popup.remove();
+      });
+
+      refresh();
     });
 
-    map.addLayer({
-      id: "beats-outline",
-      type: "line",
-      source: "beats",
-      paint: { "line-color": "#333", "line-width": 0.6, "line-opacity": 0.4 }
-    });
-
-    const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false });
-
-    map.on("mousemove", "beats-fill", (e) => {
-      map.getCanvas().style.cursor = "pointer";
-      const f = e.features[0];
-      popup
-        .setLngLat(e.lngLat)
-        .setHTML(`<b>Beat ${f.properties.beat}</b><br/>Incidents: ${f.properties.count || 0}`)
-        .addTo(map);
-    });
-
-    map.on("mouseleave", "beats-fill", () => {
-      map.getCanvas().style.cursor = "";
-      popup.remove();
-    });
-
-    refresh();
-  });
-
-}).catch(err => {
-  console.error(err);
-  alert("Data load error. Open console (Cmd+Opt+J) and look for a 404 or header mismatch.");
-});
+  } catch (err) {
+    console.error(err);
+    alert("Load failed. Open Console (Cmd+Opt+J). Look for FETCH status (404/403) or headers.");
+  }
+})();
