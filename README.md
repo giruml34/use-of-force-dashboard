@@ -32,7 +32,7 @@ This project uses:
 - State-level COVID data  
 - U.S. state boundary GeoJSON file  
 
-## Technologies Used
+## Used
 
 - Mapbox GL JS  
 - D3.js  
