@@ -1,4 +1,4 @@
-mapboxgl.accessToken = "pk.eyJ1IjoiZ2lydW13IiwiYSI6ImNtaGNsMnczejI4a2cybXB1b3h6dHBuaHkifQ.fO5Cyk2RL57zq0RKG8BDkg";
+mapboxgl.accessToken = "pk.eyJ1IjoiZ2lydW13IiwiYSI6ImNtbHNxcGY3bjA5bmgzZ29rcXpxeGkwZWsifQ.ebIyD8iAndfOu3mo_HEcBA";
 
 const CSV_PATH = "data/Use_Of_Force.csv";
 const GEOJSON_PATH = "data/Beats.geojson";
