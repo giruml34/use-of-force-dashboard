@@ -1,6 +1,6 @@
 mapboxgl.accessToken = "pk.eyJ1IjoiZ2lydW13IiwiYSI6ImNtbHNxcGY3bjA5bmgzZ29rcXpxeGkwZWsifQ.ebIyD8iAndfOu3mo_HEcBA";
 
-const CSV_PATH = "data/Use_Of_Force.csv";
+const CSV_PATH = "data/Uuse_of_force.csv";
 const GEOJSON_PATH = "data/Beats.geojson";
 
 let rawRows = [];
