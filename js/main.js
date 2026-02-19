@@ -1,7 +1,7 @@
 mapboxgl.accessToken = "pk.eyJ1IjoiZ2lydW13IiwiYSI6ImNtbHNxcGY3bjA5bmgzZ29rcXpxeGkwZWsifQ.ebIyD8iAndfOu3mo_HEcBA";
 
 // IMPORTANT: your filename has a space, so we must URL-encode it as %20
-const CSV_PATH = "data/Use_Of_Force_20260218%20(1).csv";
+const CSV_PATH = "data/Use_Of_Force_20260218%20.csv";
 const GEOJSON_PATH = "data/Beats.geojson";
 
 let rawRows = [];
